@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       const worksheet = workbook.Sheets[sheetName]
       participantData = XLSX.utils.sheet_to_json(worksheet)
     } else if (file.name.endsWith('.csv')) {
-      const text = new TextDecoder().decode(buffer)
+      const text = new TextDecoder('utf-8').decode(buffer)
       const parsed = Papa.parse(text, { header: true, skipEmptyLines: true })
       participantData = parsed.data as any[]
     } else {
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     const prompt = userPromptTemplate
       .replace('{condition}', condition)
       .replace('{count}', count.toString())
-      .replace('{participantData}', JSON.stringify(participantData))
+      .replace('{participantData}', JSON.stringify(participantData, null, 2))
 
     // OpenAI API 호출
     const completion = await openai.chat.completions.create({
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
           content: prompt
         }
       ],
-      temperature: 0.7,
+      temperature: 0.1, // 더 일관된 결과를 위해 temperature 낮춤
       max_tokens: 4000,
     })
 
@@ -117,6 +117,28 @@ export async function POST(request: NextRequest) {
       const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/)
       const jsonString = jsonMatch ? jsonMatch[1] : response
       result = JSON.parse(jsonString)
+      
+      // 한글 텍스트 검증 및 복구
+      if (result.winners) {
+        result.winners = result.winners.map((winner, index) => {
+          // 이름이 깨진 경우 원본 데이터에서 복구 시도
+          if (!winner.name || winner.name.includes('�') || winner.name.includes('◇')) {
+            console.warn(`당첨자 ${index + 1}의 이름이 깨짐: ${winner.name}`)
+            // 원본 데이터에서 매칭되는 항목 찾기
+            const originalEntry = participantData.find(p => 
+              p.id === winner.id || 
+              p.contact === winner.contact ||
+              (p.name && p.name.length > 0)
+            )
+            if (originalEntry && originalEntry.name) {
+              winner.name = originalEntry.name
+            } else {
+              winner.name = `참여자 ${index + 1}`
+            }
+          }
+          return winner
+        })
+      }
     } catch (parseError) {
       console.error('JSON 파싱 오류:', response)
       return NextResponse.json(
