@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "app/api/draw/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/prompt/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/prompt/reset/route.ts": {
+      "maxDuration": 30
+    }
+  }
+} 

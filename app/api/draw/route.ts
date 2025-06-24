@@ -7,6 +7,9 @@ import path from 'path'
 
 const PROMPTS_FILE = path.join(process.cwd(), 'prompts.json')
 
+// API Route 타임아웃 설정 (60초)
+export const maxDuration = 60
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
@@ -85,22 +88,26 @@ export async function POST(request: NextRequest) {
       .replace('{count}', count.toString())
       .replace('{participantData}', JSON.stringify(participantData, null, 2))
 
-    // OpenAI API 호출
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4.1', // 최신 GPT-4.1 모델 사용
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.1, // 더 일관된 결과를 위해 temperature 낮춤
-      max_tokens: 4000,
-    })
+    // OpenAI API 호출 (타임아웃 60초)
+    const completion = await Promise.race([
+      openai.chat.completions.create({
+        model: 'o4-mini-2025-04-16', // 최신 o4-mini 모델 사용
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_completion_tokens: 4000,
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('OpenAI API 요청이 60초를 초과했습니다.')), 60000)
+      )
+    ]) as any
 
     const response = completion.choices[0]?.message?.content
     if (!response) {
